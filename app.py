@@ -70,8 +70,8 @@ def respond(
     
     dynamic_temperature = adjust_temperature(message) if temperature is None else temperature
     
-    if system_message is None:
-        system_message = personas.get(persona, "You are a friendly Chatbot.")
+    #if system_message is None:
+        #system_message = personas.get(persona, "You are a friendly Chatbot.")
 
     if use_local_model:
         # local inference 
