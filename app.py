@@ -141,7 +141,8 @@ with gr.Blocks(css=custom_css) as demo:
         n_responses = gr.Slider(minimum=1, maximum=5, value=3, step=1, label="Number of Responses")
     
     chat_history = gr.Chatbot(label="Chat")
-
+ 
+    user_input = gr.Textbox(show_label=False, placeholder="Type your message here...")
     response_options = gr.Radio(label="Select a response", choices=[], visible=False)
     selected_response = gr.Textbox(label="Selected response will appear here")
 
