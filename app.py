@@ -17,6 +17,7 @@ def respond(
     max_tokens=512,
     temperature=0.7,
     top_p=0.95,
+    n_responses=3,  # Number of response options
     use_local_model=False,
 ):
     global stop_inference
@@ -36,21 +37,21 @@ def respond(
                 messages.append({"role": "assistant", "content": val[1]})
         messages.append({"role": "user", "content": message})
 
-        response = ""
-        for output in pipe(
-            messages,
-            max_new_tokens=max_tokens,
-            temperature=temperature,
-            do_sample=True,
-            top_p=top_p,
-        ):
-            if stop_inference:
-                response = "Inference cancelled."
-                yield history + [(message, response)]
-                return
-            token = output['generated_text'][-1]['content']
-            response += token
-            yield history + [(message, response)]  # Yield history + new response
+        for _ in range(n_responses):
+            response = ""
+            for output in pipe(
+                messages,
+                max_new_tokens=max_tokens,
+                temperature=temperature,
+                do_sample=True,
+                top_p=top_p,
+            ):
+                if stop_inference:
+                    response = "Inference cancelled."
+                    break
+                token = output['generated_text'][-1]['content']  # Collect token by token
+                response += token
+            responses.append(response)
 
     else:
         # API-based inference 
@@ -62,25 +63,23 @@ def respond(
                 messages.append({"role": "assistant", "content": val[1]})
         messages.append({"role": "user", "content": message})
 
-        response = ""
-        for message_chunk in client.chat_completion(
-            messages,
-            max_tokens=max_tokens,
-            stream=True,
-            temperature=temperature,
-            top_p=top_p,
-        ):
-            if stop_inference:
-                response = "Inference cancelled."
-                yield history + [(message, response)]
-                return
-            if stop_inference:
-                response = "Inference cancelled."
-                break
-            token = message_chunk.choices[0].delta.content
-            response += token
-            yield history + [(message, response)]  # Yield history + new response
-
+        for _ in range(n_responses):
+            response = ""
+            for message_chunk in client.chat_completion(
+                messages,
+                max_tokens=max_tokens,
+                stream=True,  # Streaming enabled
+                temperature=temperature,
+                top_p=top_p
+            ):
+                if stop_inference:
+                    response = "Inference cancelled."
+                    break
+                token = message_chunk.choices[0].delta.content  # Collect tokens chunk by chunk
+                response += token
+            responses.append(response)  # Store the complete response
+    
+    return responses
 
 def cancel_inference():
     global stop_inference
@@ -139,15 +138,34 @@ with gr.Blocks(css=custom_css) as demo:
         max_tokens = gr.Slider(minimum=1, maximum=2048, value=512, step=1, label="Max new tokens")
         temperature = gr.Slider(minimum=0.1, maximum=4.0, value=0.7, step=0.1, label="Temperature")
         top_p = gr.Slider(minimum=0.1, maximum=1.0, value=0.95, step=0.05, label="Top-p (nucleus sampling)")
-
+        n_responses = gr.Slider(minimum=1, maximum=5, value=3, step=1, label="Number of Responses")
+    
     chat_history = gr.Chatbot(label="Chat")
 
-    user_input = gr.Textbox(show_label=False, placeholder="Type your message here...")
+    response_options = gr.Radio(label="Select a response", choices=[], visible=False)
+    selected_response = gr.Textbox(label="Selected response will appear here")
 
-    cancel_button = gr.Button("Cancel Inference", variant="danger")
+    def generate_responses(message, system_message, max_tokens, temperature, top_p, n_responses, use_local_model):
+        responses = respond_curation(
+            message=message,
+            system_message=system_message,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            top_p=top_p,
+            n_responses=n_responses,
+            use_local_model=use_local_model
+        )
+        response_options.update(choices=responses, visible=True)
+        return "", responses
 
-    # Adjusted to ensure history is maintained and passed correctly
-    user_input.submit(respond, [user_input, chat_history, system_message, max_tokens, temperature, top_p, use_local_model], chat_history)
+    def select_response(selected):
+        return f"You selected: {selected}"
+
+    user_input.submit(generate_responses, 
+                      [user_input, system_message, max_tokens, temperature, top_p, n_responses, use_local_model],
+                      [user_input, response_options])
+    
+    response_options.change(select_response, response_options, selected_response)
 
     cancel_button.click(cancel_inference)
 
