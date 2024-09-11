@@ -10,6 +10,13 @@ pipe = pipeline("text-generation", "microsoft/Phi-3-mini-4k-instruct", torch_dty
 # Global flag to handle cancellation
 stop_inference = False
 
+personas = {
+    "Friendly": "You are a friendly and approachable chatbot.",
+    "Formal": "You are a professional and formal chatbot.",
+    "Humorous": "You are a chatbot with a humorous and playful tone.",
+    "Concise": "You are a chatbot that provides concise and to-the-point responses.",
+    "Detailed": "You are a chatbot that provides detailed and thorough explanations."
+}
 
 def adjust_temperature(message: str) -> float:
 
@@ -26,7 +33,6 @@ def adjust_temperature(message: str) -> float:
     keywords_for_factual = ["what", "who", "when", "where", "explain", "define"]
 
     keywords_for_creative = ["imagine", "brainstorm", "create", "idea", "suggest"]
-
 
 
     # Lower temperature for short or factual queries
@@ -53,6 +59,7 @@ def respond(
     temperature= None,
     top_p=0.95,
     use_local_model=False,
+    persona = 'Friendly'
 ):
     global stop_inference
     stop_inference = False  # Reset cancellation flag
@@ -62,7 +69,10 @@ def respond(
         history = []
     
     dynamic_temperature = adjust_temperature(message) if temperature is None else temperature
-
+    
+    if system_message is None:
+        system_message = personas.get(persona, "You are a friendly Chatbot.")
+        
     if use_local_model:
         # local inference 
         messages = [{"role": "system", "content": system_message}]
@@ -185,6 +195,8 @@ with gr.Blocks(css=custom_css) as demo:
     with gr.Row():
         system_message = gr.Textbox(value="You are a friendly Chatbot.", label="System message", interactive=True)
         use_local_model = gr.Checkbox(label="Use Local Model", value=False)
+        persona = gr.Dropdown(choices=list(personas.keys()), value="Friendly", label="Select Persona")
+
 
     with gr.Row():
         max_tokens = gr.Slider(minimum=1, maximum=2048, value=512, step=1, label="Max new tokens")
