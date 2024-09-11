@@ -60,6 +60,8 @@ def respond(
     # Initialize history if it's None
     if history is None:
         history = []
+    
+    dynamic_temperature = adjust_temperature(message) if temperature is None else temperature
 
     if use_local_model:
         # local inference 
