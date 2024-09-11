@@ -72,7 +72,7 @@ def respond(
     
     if system_message is None:
         system_message = personas.get(persona, "You are a friendly Chatbot.")
-        
+
     if use_local_model:
         # local inference 
         messages = [{"role": "system", "content": system_message}]
@@ -211,7 +211,7 @@ with gr.Blocks(css=custom_css) as demo:
     cancel_button = gr.Button("Cancel Inference", variant="danger")
     index_state = gr.State(value=[])
     # Adjusted to ensure history is maintained and passed correctly
-    user_input.submit(respond, [user_input, chat_history, system_message, max_tokens, temperature, top_p, use_local_model], chat_history)
+    user_input.submit(respond, [user_input, chat_history, system_message, max_tokens, temperature, top_p, use_local_model, persona], chat_history)
     chat_history.like(vote, [tmp, index_state], [tmp, index_state])
     cancel_button.click(cancel_inference)
 
