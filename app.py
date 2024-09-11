@@ -145,9 +145,6 @@ def vote(tmp, index_state, data: gr.LikeData):
             index_state.append(index_new)
     return f"Feedback: {data.value}; Index: {data.index}; Liked: {data.liked}; Votes: {index_state}", index_state
 
-def update_system_message(persona):
-    return personas.get(persona, "You are a friendly Chatbot.")
-
 
 # Custom CSS for a fancy look
 custom_css = """
@@ -215,12 +212,15 @@ with gr.Blocks(css=custom_css) as demo:
     index_state = gr.State(value=[])
 
     # Submit function to handle user input
+    def update_system_message(persona):
+        return personas.get(persona, "You are a friendly Chatbot.")
+    
+    # Submit function to handle user input
     def submit_function(message, history, system_message, max_tokens, temperature, top_p, use_local_model, persona):
         system_message = update_system_message(persona)
-        return respond(message, history, system_message, max_tokens, temperature, top_p, use_local_model, persona)
- 
+        return list(respond(message, history, system_message, max_tokens, temperature, top_p, use_local_model, persona))
+    
     user_input.submit(submit_function, [user_input, chat_history, system_message, max_tokens, temperature, top_p, use_local_model, persona], chat_history)
-   
     chat_history.like(vote, [tmp, index_state], [tmp, index_state])
     cancel_button.click(cancel_inference)
 
