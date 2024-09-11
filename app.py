@@ -13,22 +13,29 @@ stop_inference = False
 # Response curation function with multiple generated responses
 def respond_curation(
     message,
+    history: list[tuple[str, str]] = None,  # Chat history in the form of list of tuples
     system_message="You are a helpful assistant.",
     max_tokens=128,
     temperature=0.7,
     top_p=0.95,
-    n_responses=3,  # Number of response options
+    n_responses=1,  # Number of response options
     use_local_model=False
 ):
     global stop_inference
     stop_inference = False  # Reset the cancellation flag
-    
+
+    if history is None:
+        history = []
+
     responses = []  # List to store all response options
     
     if use_local_model:
         # Local inference
-        messages = [{"role": "system", "content": system_message},
-                    {"role": "user", "content": message}]
+        messages = [{"role": "system", "content": system_message}]
+        for user_msg, bot_msg in history:
+            messages.append({"role": "user", "content": user_msg})
+            messages.append({"role": "assistant", "content": bot_msg})
+        messages.append({"role": "user", "content": message})
         
         for _ in range(n_responses):
             response = ""
@@ -48,12 +55,14 @@ def respond_curation(
             
     else:
         # API-based inference
-        messages = [{"role": "system", "content": system_message},
-                    {"role": "user", "content": message}]
+        messages = [{"role": "system", "content": system_message}]
+        for user_msg, bot_msg in history:
+            messages.append({"role": "user", "content": user_msg})
+            messages.append({"role": "assistant", "content": bot_msg})
+        messages.append({"role": "user", "content": message})
         
         for _ in range(n_responses):
             response = ""
-            # Call the API without expecting a structured 'choices' response
             for message_chunk in client.chat_completion(
                 messages,
                 max_tokens=max_tokens,
@@ -70,25 +79,16 @@ def respond_curation(
                 response += token
             responses.append(response)  # Store the complete response
     
-    return responses  # Return all the generated responses
+    # Append the last message and response to the history
+    for response in responses:
+        history.append((message, response))
+
+    return history  # Return the updated history to display in the Chatbot
 
 # Function to cancel inference
 def cancel_inference():
     global stop_inference
     stop_inference = True
-
-# Vote function for user feedback
-def vote(tmp, index_state, data: gr.LikeData):
-    value_new = data.value
-    index_new = data.index
-    if len(index_state) == 0:
-        index_state.append(index_new)
-    else:
-        if index_new in index_state:
-            return "Your feedback is already saved", index_state
-        else:
-            index_state.append(index_new)
-    return f"Feedback: {data.value}; Index: {data.index}; Liked: {data.liked}; Votes: {index_state}", index_state
 
 # Custom CSS for a fancy look
 custom_css = """
@@ -153,8 +153,7 @@ with gr.Blocks(css=custom_css) as demo:
     index_state = gr.State(value=[])
     
     # Adjusted to ensure history is maintained and passed correctly
-    user_input.submit(respond_curation, [user_input, system_message, max_tokens, temperature, top_p, use_local_model], chat_history)
-    chat_history.like(vote, [tmp, index_state], [tmp, index_state])
+    user_input.submit(respond_curation, [user_input, chat_history, system_message, max_tokens, temperature, top_p, use_local_model], chat_history)
     cancel_button.click(cancel_inference)
 
 # Launch the demo
