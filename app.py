@@ -54,7 +54,7 @@ def adjust_temperature(message: str) -> float:
 def respond(
     message,
     history: list[tuple[str, str]],
-    system_message="You are a friendly Chatbot.",
+    system_message=None,
     max_tokens=512,
     temperature= None,
     top_p=0.95,
@@ -211,7 +211,23 @@ with gr.Blocks(css=custom_css) as demo:
     cancel_button = gr.Button("Cancel Inference", variant="danger")
     index_state = gr.State(value=[])
     # Adjusted to ensure history is maintained and passed correctly
-    user_input.submit(respond, [user_input, chat_history, system_message, max_tokens, temperature, top_p, use_local_model, persona], chat_history)
+   def update_system_message(persona):
+
+        return personas.get(persona, "You are a friendly Chatbot.")
+
+    
+
+    # Submit function to handle user input
+
+    def submit_function(message, history, system_message, max_tokens, temperature, top_p, use_local_model, persona):
+
+        system_message = update_system_message(persona)
+
+        return respond(message, history, system_message, max_tokens, temperature, top_p, use_local_model, persona)
+
+    
+    user_input.submit(submit_function, [user_input, chat_history, system_message, max_tokens, temperature, top_p, use_local_model, persona], chat_history)
+   
     chat_history.like(vote, [tmp, index_state], [tmp, index_state])
     cancel_button.click(cancel_inference)
 
