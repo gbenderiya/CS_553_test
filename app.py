@@ -10,6 +10,12 @@ pipe = pipeline("text-generation", "microsoft/Phi-3-mini-4k-instruct", torch_dty
 # Global flag to handle cancellation
 stop_inference = False
 
+# Global variable to track feedback history
+feedback_tracker = {
+    "likes": 0,
+    "dislikes": 0
+}
+
 personas = {
     "Friendly": "You are a friendly and approachable chatbot.",
     "Formal": "You are a professional and formal chatbot.",
@@ -19,62 +25,44 @@ personas = {
 }
 
 def adjust_temperature(message: str) -> float:
-
-    """
-
-    Adjust the temperature dynamically based on the message content.
-
-    - Lower temperature for factual questions.
-
-    - Higher temperature for creative or brainstorming responses.
-
-    """
-
     keywords_for_factual = ["what", "who", "when", "where", "explain", "define"]
-
     keywords_for_creative = ["imagine", "brainstorm", "create", "idea", "suggest"]
 
-
-    # Lower temperature for short or factual queries
-
     if any(keyword in message.lower() for keyword in keywords_for_factual) or len(message.split()) < 5:
-
         return 0.3  # Factual, concise
-
-    # Higher temperature for open-ended or creative queries
-
     elif any(keyword in message.lower() for keyword in keywords_for_creative) or len(message.split()) > 15:
-
         return 0.9  # Creative, open-ended
-
-    # Default temperature for general queries
-
-    return 0.7
+    
+    return 0.7  # Default temperature for general queries
 
 def respond(
     message,
     history: list[tuple[str, str]],
     system_message=None,
     max_tokens=512,
-    temperature= None,
+    temperature=None,
     top_p=0.95,
     use_local_model=False,
-    persona = 'Friendly'
+    persona='Friendly',
 ):
     global stop_inference
+    global feedback_tracker
     stop_inference = False  # Reset cancellation flag
 
     # Initialize history if it's None
     if history is None:
         history = []
-    
+
     dynamic_temperature = adjust_temperature(message) if temperature is None else temperature
-    
-    #if system_message is None:
-        #system_message = personas.get(persona, "You are a friendly Chatbot.")
+
+    # Adjust temperature based on feedback
+    if feedback_tracker["dislikes"] > feedback_tracker["likes"]:
+        dynamic_temperature = max(dynamic_temperature - 0.1, 0.3)  # Make responses more factual
+    elif feedback_tracker["likes"] > feedback_tracker["dislikes"]:
+        dynamic_temperature = min(dynamic_temperature + 0.1, 0.9)  # Make responses more creative
 
     if use_local_model:
-        # local inference 
+        # Local inference
         messages = [{"role": "system", "content": system_message}]
         for val in history:
             if val[0]:
@@ -100,7 +88,7 @@ def respond(
             yield history + [(message, response)]  # Yield history + new response
 
     else:
-        # API-based inference 
+        # API-based inference
         messages = [{"role": "system", "content": system_message}]
         for val in history:
             if val[0]:
@@ -128,23 +116,20 @@ def respond(
             response += token
             yield history + [(message, response)]  # Yield history + new response
 
-
 def cancel_inference():
     global stop_inference
     stop_inference = True
 
 def vote(tmp, index_state, data: gr.LikeData):
-    value_new = data.value
-    index_new = data.index
-    if len(index_state) == 0:
-        index_state.append(index_new)
+    global feedback_tracker
+    if data.liked:
+        feedback_tracker['likes'] += 1
     else:
-        if index_new in index_state:
-            return "Your feedback is already saved", index_state
-        else:
-            index_state.append(index_new)
-    return f"Feedback: {data.value}; Index: {data.index}; Liked: {data.liked}; Votes: {index_state}", index_state
+        feedback_tracker['dislikes'] += 1
+    return f"Feedback: {data.value}; Liked: {data.liked}", index_state
 
+def update_sys_msg(persona):
+    return personas.get(persona, "You are a friendly and approachable chatbot.")
 
 # Custom CSS for a fancy look
 custom_css = """
@@ -188,41 +173,32 @@ custom_css = """
 
 # Define the interface
 with gr.Blocks(css=custom_css) as demo:
-    gr.Markdown("<h1 style='text-align: center;'>🌟 Fancy AI Chatbot 🌟</h1>")
-    gr.Markdown("AI chatbot using customizable settings below.  kkkkk")
-    
+    gr.Markdown("<h1 style='text-align: center;'>🌟 AI Chatbot 🌟</h1>")
+    gr.Markdown("AI chatbot using customizable settings.")
 
     with gr.Row():
-        system_message = gr.Textbox(value="You are a friendly Chatbot.", label="System message", interactive=True)
+        persona_dropdown = gr.Dropdown(choices=list(personas.keys()), value="Friendly", label="Select Persona")
         use_local_model = gr.Checkbox(label="Use Local Model", value=False)
-        persona = gr.Dropdown(choices=list(personas.keys()), value="Friendly", label="Select Persona")
-
+        system_message = gr.Textbox(value=personas["Friendly"], label="System message", interactive=True)
+        persona_dropdown.change(update_sys_msg, inputs=persona_dropdown, outputs=system_message)
 
     with gr.Row():
         max_tokens = gr.Slider(minimum=1, maximum=2048, value=512, step=1, label="Max new tokens")
-        temperature = gr.Slider(minimum=0.1, maximum=4.0, value=0.7, step=0.1, label="Temperature", visible = False)
+        temperature = gr.Slider(minimum=0.1, maximum=4.0, value=0.7, step=0.1, label="Temperature", visible=False)  # Hide it because of dynamic temperature
         top_p = gr.Slider(minimum=0.1, maximum=1.0, value=0.95, step=0.05, label="Top-p (nucleus sampling)")
-    
-    tmp = gr.Textbox(visible=True, value="") 
+
+    tmp = gr.Textbox(visible=True, value="", label='Feedback Status')
     chat_history = gr.Chatbot(label="Chat")
 
     user_input = gr.Textbox(show_label=False, placeholder="Type your message here...")
-    
+
     cancel_button = gr.Button("Cancel Inference", variant="danger")
     index_state = gr.State(value=[])
 
-    # Submit function to handle user input
-    def update_system_message(persona):
-        return personas.get(persona, "You are a friendly Chatbot.")
-    
-    # Submit function to handle user input
-    def submit_function(message, history, system_message, max_tokens, temperature, top_p, use_local_model, persona):
-        system_message = update_system_message(persona)
-        return list(respond(message, history, system_message, max_tokens, temperature, top_p, use_local_model, persona))
-    
-    user_input.submit(submit_function, [user_input, chat_history, system_message, max_tokens, temperature, top_p, use_local_model, persona], chat_history)
+    # Adjusted to ensure history is maintained and passed correctly
+    user_input.submit(respond, [user_input, chat_history, system_message, max_tokens, temperature, top_p, use_local_model, persona_dropdown], chat_history)
     chat_history.like(vote, [tmp, index_state], [tmp, index_state])
     cancel_button.click(cancel_inference)
 
 if __name__ == "__main__":
-    demo.launch(share=False)
+    demo.launch(share=False)  # Remove share=True because it's not supported on HF Spaces
