@@ -3,3 +3,6 @@ gradio==4.39.*
 torch==2.4.*
 transformers==4.43.*
 accelerate==0.33.*
+pydantic==2.8.2
+pydantic-core==2.20.1
+fastapi==0.112.4
