@@ -1,0 +1,29 @@
+name: VM Recovery Automation
+
+on:
+  schedule:
+    # Runs every day at 1:00 UTC (you can adjust this to fit your needs)
+    - cron: '0 * * * *'
+  workflow_dispatch:
+    # Allows manual triggering of the workflow
+
+jobs:
+  auto-recovery:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v2
+
+    - name: Set up SSH Keys
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.STUDENT_ADMIN_KEY }}" > ~/.ssh/student-admin_key
+        chmod 600 ~/.ssh/student-admin_key
+
+    - name: Run Recovery Script
+      run: |
+        chmod +x auto_recovery.sh
+        ./auto_recovery.sh
+
+   
